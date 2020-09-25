@@ -10,7 +10,7 @@ from .util import observe, observe_nb2, ExponentialRandomWalk, LogisticRandomWal
 from .base import SEIRDBase, getter
 
 import numpy as onp
-
+import pdb
 
 """
 ************************************************************
@@ -19,7 +19,6 @@ SEIRD model
 """
 
 class SEIRD(SEIRDBase):    
-    
     def __call__(self,
                  T = 50,
                  N = 1e5,
@@ -55,7 +54,6 @@ class SEIRD(SEIRDBase):
 
 
         # Sample dispersion parameters around specified values
-
         death_dispersion = numpyro.sample("death_dispersion", 
                                            dist.TruncatedNormal(low=0.1,
                                                                 loc=death_dispersion, 
@@ -119,10 +117,10 @@ class SEIRD(SEIRDBase):
             death = clean_daily_obs(onp.diff(death))
         
         # First observation
-        with numpyro.handlers.scale(scale_factor=0.5):
+        with numpyro.handlers.scale(scale=0.5):
             y0 = observe_nb2("dy0", x0[6], det_prob0, confirmed_dispersion, obs=confirmed0)
             
-        with numpyro.handlers.scale(scale_factor=2.0):
+        with numpyro.handlers.scale(scale=2.0):
             z0 = observe_nb2("dz0", x0[5], det_prob_d, death_dispersion, obs=death0)
 
         params = (beta0, 
@@ -209,10 +207,10 @@ class SEIRD(SEIRDBase):
         x_diff = np.diff(x, axis=0)
 
         # Noisy observations
-        with numpyro.handlers.scale(scale_factor=0.5):
+        with numpyro.handlers.scale(scale=0.5):
             y = observe_nb2("dy" + suffix, x_diff[:,6], det_prob, confirmed_dispersion, obs = confirmed)   
 
-        with numpyro.handlers.scale(scale_factor=2.0):
+        with numpyro.handlers.scale(scale=2.0):
             z = observe_nb2("dz" + suffix, x_diff[:,5], det_prob_d, death_dispersion, obs = death)  
 
         

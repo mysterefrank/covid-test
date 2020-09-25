@@ -165,7 +165,7 @@ def plot_R0(mcmc_samples, start, ax=None):
     t = pd.date_range(start=start, periods=beta.shape[1], freq='D')
     R0 = beta/gamma
 
-    pi = np.percentile(R0, (10, 90), axis=0)
+    pi = onp.percentile(R0, (10, 90), axis=0)
     df = pd.DataFrame(index=t, data={'R0': np.median(R0, axis=0)})
     df.plot(style='-o', ax=ax)
     ax.fill_between(t, pi[0,:], pi[1,:], alpha=0.1)
@@ -185,14 +185,25 @@ def plot_growth_rate(mcmc_samples, start, model=SEIRModel, ax=None):
 
     growth_rate = SEIRModel.growth_rate((beta, sigma, gamma))
 
-    pi = np.percentile(growth_rate, (10, 90), axis=0)
-    df = pd.DataFrame(index=t, data={'growth_rate': np.median(growth_rate, axis=0)})
+    pi = onp.percentile(growth_rate, (10, 90), axis=0)
+    df = pd.DataFrame(index=t, data={'growth_rate': onp.median(growth_rate, axis=0)})
     df.plot(style='-o', ax=ax)
     ax.fill_between(t, pi[0,:], pi[1,:], alpha=0.1)
 
     ax.axhline(0, linestyle='--')
     
 
+def get_growth_rate(mcmc_samples, start, model=SEIRModel):
+    
+    # Compute growth rate over time
+    beta = mcmc_samples['beta']
+    sigma = mcmc_samples['sigma'][:,None]
+    gamma = mcmc_samples['gamma'][:,None]
+
+    growth_rate = SEIRModel.growth_rate((beta, sigma, gamma))
+    r_0 = SEIRModel.R0((beta, sigma, gamma))
+
+    return growth_rate, r_0
 
 """
 ************************************************************
@@ -210,7 +221,7 @@ def run_place(data,
               num_samples = 1000,
               num_chains = 1,
               num_prior_samples = 0,              
-              T_future=4*7,
+              T_future=250,
               prefix = "results",
               resample_low=0,
               resample_high=100,
@@ -252,7 +263,7 @@ def run_place(data,
     # Forecasting posterior predictive (do condition on observations)
     print(" * collecting forecast samples")
     forecast_samples = model.forecast(T_future=T_future)
-        
+    
     if save:
 
         # Save samples
@@ -323,6 +334,7 @@ def gen_forecasts(data,
                   save = True,
                   show = True, 
                   prefix='results',
+                  forecast_horizon=28,
                   **kwargs):
     
 
@@ -336,45 +348,43 @@ def gen_forecasts(data,
     confirmed = data[place]['data'].confirmed[start:end]
     death = data[place]['data'].death[start:end]
 
-    T = len(confirmed)
     N = data[place]['pop']
 
     filename = samples_path / f'{place}.npz'   
     _, mcmc_samples, post_pred_samples, forecast_samples = load_samples(filename)
-        
+    
     for daily in [False, True]:
         for scale in ['log', 'lin']:
-            for T in [28, 56]:
 
-                fig, axes = plt.subplots(nrows = 2, figsize=(8,12), sharex=True)    
+            fig, axes = plt.subplots(nrows = 2, figsize=(8,12), sharex=True)    
 
-                if daily:
-                    variables = ['dy', 'dz']
-                    observations = [confirmed.diff(), death.diff()]
-                else:
-                    variables = ['y', 'z']
-                    observations= [confirmed, death]
+            if daily:
+                variables = ['dy', 'dz']
+                observations = [confirmed.diff(), death.diff()]
+            else:
+                variables = ['y', 'z']
+                observations= [confirmed, death]
 
-                for variable, obs, ax in zip(variables, observations, axes):
-                    model.plot_forecast(variable,
-                                        post_pred_samples,
-                                        forecast_samples,
-                                        start,
-                                        T_future=T,
-                                        obs=obs,
-                                        ax=ax,
-                                        scale=scale)
+            for variable, obs, ax in zip(variables, observations, axes):
+                model.plot_forecast(variable,
+                                    post_pred_samples,
+                                    forecast_samples,
+                                    start,
+                                    T_future=forecast_horizon,
+                                    obs=obs,
+                                    ax=ax,
+                                    scale=scale)
 
-                name = data[place]['name']
-                plt.suptitle(f'{name} {T} days ')
-                plt.tight_layout()
+            name = data[place]['name']
+            plt.suptitle(f'{name} {forecast_horizon} days ')
+            plt.tight_layout()
 
-                if save:
-                    filename = vis_path / f'{place}_scale_{scale}_daily_{daily}_T_{T}.png'
-                    plt.savefig(filename)
+            if save:
+                filename = vis_path / f'{place}_scale_{scale}_daily_{daily}_T_{forecast_horizon}.png'
+                plt.savefig(filename)
 
-                if show:
-                    plt.show()
+            if show:
+                plt.show()
     
     fig, ax = plt.subplots(figsize=(5,4))
     plot_growth_rate(mcmc_samples, start, ax=ax)
@@ -387,7 +397,35 @@ def gen_forecasts(data,
 
     if show:
         plt.show()   
-        
+    
+
+def get_R_final(data, 
+                  place, 
+                  model_type=covid.models.SEIRD.SEIRD,
+                  start = '2020-03-04', 
+                  end=None,
+                  save = True,
+                  show = True, 
+                  prefix='results',
+                  forecast_horizon=28,
+                  **kwargs):
+    
+    # Deal with paths
+    samples_path = Path(prefix) / 'samples'
+    
+    model = model_type()
+
+    confirmed = data[place]['data'].confirmed[start:end]
+    death = data[place]['data'].death[start:end]
+
+    N = data[place]['pop']
+
+    filename = samples_path / f'{place}.npz'   
+    _, mcmc_samples, post_pred_samples, forecast_samples = load_samples(filename)
+    
+    return get_growth_rate(mcmc_samples, start)
+
+    
         
         
 """
